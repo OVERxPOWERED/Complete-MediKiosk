@@ -1,12 +1,15 @@
-kiosk_interface/node_modules
-doc_UI_ref
-kiosk_UI_ref
-.gitignore
-doctor-interface/node_modules
-kiosk_interface/.env
-kiosk-interface
+# Dependencies
+kiosk_interface/node_modules/
+doctor-interface/node_modules/
+
+# Reference assets
+doc_UI_ref/
+kiosk_UI_ref/
+
+# Environment files (ignore all secrets, keep example templates)
 .env
-.env.local
+.env.*
 *.env
-*.env.local
+*.env.*
 !*.env.example
+!**/.env.example
