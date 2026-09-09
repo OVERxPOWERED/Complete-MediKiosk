@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100" width="100%" height="100%" style="background:#fff;font-family:system-ui,sans-serif;">
+  <rect x="20" y="20" width="760" height="1060" fill="#fff" stroke="#e2e8f0" stroke-width="2" rx="8"/>
+  <g transform="translate(40, 45)">
+    <rect x="0" y="0" width="48" height="48" rx="8" fill="#0f766e"/>
+    <text x="14" y="32" font-size="24" font-weight="bold" fill="#fff">L</text>
+    <text x="60" y="24" font-size="20" font-weight="bold" fill="#0f172a">Apex Diagnostic Pathology Laboratory</text>
+    <text x="60" y="42" font-size="12" fill="#64748b">Govt. Certified Regional Reference Lab · NABL ISO 15189:2012</text>
+    <text x="560" y="24" font-size="16" font-weight="bold" fill="#0f766e">COMPLETE BLOOD COUNT</text>
+    <text x="560" y="42" font-size="11" fill="#64748b">Sample ID: LAB-280826-44</text>
+  </g>
+  <line x1="40" y1="105" x2="760" y2="105" stroke="#cbd5e1" stroke-width="1.5"/>
+
+  <!-- Patient banner -->
+  <g transform="translate(40, 120)">
+    <rect x="0" y="0" width="720" height="70" fill="#f8fafc" stroke="#e2e8f0" rx="6"/>
+    <text x="20" y="28" font-size="12" fill="#64748b">Patient Name:</text>
+    <text x="105" y="28" font-size="12" font-weight="bold" fill="#0f172a">Rohit Mehta (36/M)</text>
+    <text x="20" y="52" font-size="12" fill="#64748b">Referred By:</text>
+    <text x="105" y="52" font-size="12" fill="#0f172a">Dr. Anjali Verma / General Medicine</text>
+    <text x="400" y="28" font-size="12" fill="#64748b">Collection Date:</text>
+    <text x="500" y="28" font-size="12" fill="#0f172a">28 Aug 2026, 08:30 AM</text>
+    <text x="400" y="52" font-size="12" fill="#64748b">Reporting Date:</text>
+    <text x="500" y="52" font-size="12" fill="#0f172a">28 Aug 2026, 02:15 PM</text>
+  </g>
+
+  <!-- Table header -->
+  <g transform="translate(40, 210)">
+    <rect x="0" y="0" width="720" height="35" fill="#f1f5f9"/>
+    <text x="20" y="22" font-size="12" font-weight="bold" fill="#334155">TEST PARAMETER</text>
+    <text x="280" y="22" font-size="12" font-weight="bold" fill="#334155">RESULT</text>
+    <text x="420" y="22" font-size="12" font-weight="bold" fill="#334155">UNIT</text>
+    <text x="560" y="22" font-size="12" font-weight="bold" fill="#334155">REFERENCE RANGE</text>
+
+    <!-- Rows -->
+    <g transform="translate(0, 40)">
+      <!-- Row 1 -->
+      <text x="20" y="25" font-size="13" fill="#0f172a">Hemoglobin (Hb)</text>
+      <text x="280" y="25" font-size="13" font-weight="bold" fill="#0f172a">14.8</text>
+      <text x="420" y="25" font-size="13" fill="#64748b">g/dL</text>
+      <text x="560" y="25" font-size="13" fill="#64748b">13.0 - 17.0</text>
+      <line x1="0" y1="40" x2="720" y2="40" stroke="#f1f5f9"/>
+
+      <!-- Row 2 -->
+      <text x="20" y="65" font-size="13" fill="#0f172a">Total Leukocyte Count (TLC)</text>
+      <text x="280" y="65" font-size="13" font-weight="bold" fill="#0f172a">7,400</text>
+      <text x="420" y="65" font-size="13" fill="#64748b">/cu.mm</text>
+      <text x="560" y="65" font-size="13" fill="#64748b">4,000 - 11,000</text>
+      <line x1="0" y1="80" x2="720" y2="80" stroke="#f1f5f9"/>
+
+      <!-- Row 3 -->
+      <text x="20" y="105" font-size="13" fill="#0f172a">Platelet Count</text>
+      <text x="280" y="105" font-size="13" font-weight="bold" fill="#0f172a">240,000</text>
+      <text x="420" y="105" font-size="13" fill="#64748b">/cu.mm</text>
+      <text x="560" y="105" font-size="13" fill="#64748b">150,000 - 450,000</text>
+      <line x1="0" y1="120" x2="720" y2="120" stroke="#f1f5f9"/>
+
+      <!-- Row 4 -->
+      <text x="20" y="145" font-size="13" fill="#0f172a">RBC Count</text>
+      <text x="280" y="145" font-size="13" font-weight="bold" fill="#0f172a">4.92</text>
+      <text x="420" y="145" font-size="13" fill="#64748b">mil/cu.mm</text>
+      <text x="560" y="145" font-size="13" fill="#64748b">4.5 - 5.5</text>
+      <line x1="0" y1="160" x2="720" y2="160" stroke="#f1f5f9"/>
+
+      <!-- Row 5 -->
+      <text x="20" y="185" font-size="13" fill="#0f172a">Packed Cell Volume (PCV)</text>
+      <text x="280" y="185" font-size="13" font-weight="bold" fill="#0f172a">44.2</text>
+      <text x="420" y="185" font-size="13" fill="#64748b">%</text>
+      <text x="560" y="185" font-size="13" fill="#64748b">40.0 - 50.0</text>
+      <line x1="0" y1="200" x2="720" y2="200" stroke="#f1f5f9"/>
+
+      <!-- Row 6 -->
+      <text x="20" y="225" font-size="13" fill="#0f172a">Erythrocyte Sedimentation Rate (ESR)</text>
+      <text x="280" y="225" font-size="13" font-weight="bold" fill="#0f172a">12</text>
+      <text x="420" y="225" font-size="13" fill="#64748b">mm/hr</text>
+      <text x="560" y="225" font-size="13" fill="#64748b">0 - 15</text>
+      <line x1="0" y1="240" x2="720" y2="240" stroke="#f1f5f9"/>
+
+      <!-- DLC Subheading -->
+      <rect x="0" y="250" width="720" height="28" fill="#f8fafc"/>
+      <text x="20" y="269" font-size="12" font-weight="bold" fill="#475569">DIFFERENTIAL LEUKOCYTE COUNT (DLC)</text>
+
+      <text x="20" y="305" font-size="13" fill="#0f172a">Neutrophils</text>
+      <text x="280" y="305" font-size="13" fill="#0f172a">64</text>
+      <text x="420" y="305" font-size="13" fill="#64748b">%</text>
+      <text x="560" y="305" font-size="13" fill="#64748b">40 - 75</text>
+      <line x1="0" y1="320" x2="720" y2="320" stroke="#f1f5f9"/>
+
+      <text x="20" y="345" font-size="13" fill="#0f172a">Lymphocytes</text>
+      <text x="280" y="345" font-size="13" fill="#0f172a">28</text>
+      <text x="420" y="345" font-size="13" fill="#64748b">%</text>
+      <text x="560" y="345" font-size="13" fill="#64748b">20 - 45</text>
+      <line x1="0" y1="360" x2="720" y2="360" stroke="#f1f5f9"/>
+
+      <text x="20" y="385" font-size="13" fill="#0f172a">Eosinophils</text>
+      <text x="280" y="385" font-size="13" fill="#0f172a">4</text>
+      <text x="420" y="385" font-size="13" fill="#64748b">%</text>
+      <text x="560" y="385" font-size="13" fill="#64748b">1 - 6</text>
+      <line x1="0" y1="400" x2="720" y2="400" stroke="#f1f5f9"/>
+
+      <text x="20" y="425" font-size="13" fill="#0f172a">Monocytes</text>
+      <text x="280" y="425" font-size="13" fill="#0f172a">4</text>
+      <text x="420" y="425" font-size="13" fill="#64748b">%</text>
+      <text x="560" y="425" font-size="13" fill="#64748b">2 - 10</text>
+    </g>
+  </g>
+
+  <!-- Signoff -->
+  <g transform="translate(40, 920)">
+    <line x1="0" y1="0" x2="720" y2="0" stroke="#cbd5e1"/>
+    <text x="20" y="35" font-size="12" font-weight="bold" fill="#0f766e">Interpretation: Complete Hemogram within normal limits.</text>
+    <g transform="translate(500, 10)">
+      <path d="M 10 30 Q 30 5 60 25 T 100 20" fill="none" stroke="#0f766e" stroke-width="2"/>
+      <text x="20" y="55" font-size="11" font-weight="bold" fill="#0f172a">Dr. R. Sharma</text>
+      <text x="10" y="70" font-size="10" fill="#64748b">MD (Pathology), DNB</text>
+    </g>
+  </g>
+</svg>
