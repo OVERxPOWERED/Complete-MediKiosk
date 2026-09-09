@@ -4,3 +4,9 @@ kiosk_UI_ref
 .gitignore
 doctor-interface/node_modules
 kiosk_interface/.env
+kiosk-interface
+.env
+.env.local
+*.env
+*.env.local
+!*.env.example
