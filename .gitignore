@@ -3,3 +3,4 @@ doc_UI_ref
 kiosk_UI_ref
 .gitignore
 doctor-interface/node_modules
+kiosk-interface/.env
