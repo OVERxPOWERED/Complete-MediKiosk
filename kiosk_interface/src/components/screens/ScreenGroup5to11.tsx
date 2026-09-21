@@ -174,7 +174,7 @@ export const ScreenGroup5to11: React.FC<ScreenGroup5to11Props> = ({
           {/* Continue for this visit */}
           <div 
             className="patient-choice-card new-patient-card"
-            onClick={() => onNavigate(12)}
+            onClick={() => onNavigate(18)}
             role="button"
             tabIndex={0}
           >

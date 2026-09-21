@@ -17,6 +17,7 @@ interface ScreenGroup44to51Props {
   onNavigate: (target: number) => void;
   selectedLanguage: 'en' | 'hi';
   patientToken?: string;
+  patientName?: string;
   onCheckinComplete?: () => void;
 }
 
@@ -25,10 +26,20 @@ export const ScreenGroup44to51: React.FC<ScreenGroup44to51Props> = ({
   onNavigate,
   selectedLanguage,
   patientToken = 'A1054',
+  patientName,
   onCheckinComplete,
 }) => {
   const isHi = selectedLanguage === 'hi';
   const [dispenseProgress, setDispenseProgress] = useState(25);
+
+  useEffect(() => {
+    if (screenNum === 44) {
+      const timer = setTimeout(() => {
+        onNavigate(47);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [screenNum, onNavigate]);
 
   useEffect(() => {
     if (screenNum === 49) {
@@ -97,7 +108,7 @@ export const ScreenGroup44to51: React.FC<ScreenGroup44to51Props> = ({
           <div className="summary-snapshot-grid">
             <div className="snapshot-box">
               <User size={20} color="#00796B" />
-              <span>Rohit Mehta (38 Y, M)</span>
+              <span>{patientName || 'Rohit Mehta'} (38 Y, M)</span>
             </div>
             <div className="snapshot-box">
               <Heart size={20} color="#E11D48" />
@@ -168,7 +179,7 @@ export const ScreenGroup44to51: React.FC<ScreenGroup44to51Props> = ({
           </div>
 
           <div className="qr-meta-box">
-            <span>Patient: Rohit Mehta · Counter 4</span>
+            <span>Patient: {patientName || 'Rohit Mehta'} · Counter 4</span>
           </div>
 
           <button 

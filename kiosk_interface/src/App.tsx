@@ -15,6 +15,7 @@ import { VoiceOrb } from './components/common/VoiceOrb';
 import { DualCaptions } from './components/common/DualCaptions';
 import { CameraPipWidget } from './components/common/CameraPipWidget';
 import { ScreenFooter } from './components/common/ScreenFooter';
+import { LiveDiagnosticsDrawer } from './components/common/LiveDiagnosticsDrawer';
 
 import { 
   SCREEN_CATALOG, 
@@ -51,7 +52,7 @@ export default function App() {
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'speaking' | 'processing'>('idle');
   const [liveTranscript, setLiveTranscript] = useState<string>('');
   const [hasWokenAudio, setHasWokenAudio] = useState<boolean>(false);
-  const [skipMeasurements, setSkipMeasurements] = useState<boolean>(false);
+  const [skipMeasurements, setSkipMeasurements] = useState<boolean>(true);
 
   // Patient Profile & Vitals State
   const [patientData, setPatientData] = useState<PatientData>({
@@ -100,19 +101,31 @@ export default function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const [hasWebcam, setHasWebcam] = useState<boolean>(false);
 
-  // Bilingual code: Hindi or English
+  const patientDataRef = useRef<PatientData>(patientData);
+  useEffect(() => {
+    patientDataRef.current = patientData;
+  }, [patientData]);
+
+  // Bilingual code: Hindi or English with synchronous ref
+  const currentLangRef = useRef<'en' | 'hi'>('en');
   const langCode: 'en' | 'hi' = (selectedLanguage === 'Hindi' || selectedLanguage === 'हिंदी') ? 'hi' : 'en';
+
+  const setAppLanguage = useCallback((lang: 'en' | 'hi') => {
+    currentLangRef.current = lang;
+    setSelectedLanguage(lang === 'hi' ? 'हिंदी' : 'English');
+    voiceAgentRef.current?.setLanguage(lang);
+  }, []);
 
   const currentScreenNum = getScreenNum(currentScreen);
   const currentMeta = getScreenMeta(currentScreen);
   const mascotSpeech = langCode === 'hi' ? currentMeta.speechHi : currentMeta.speechEn;
 
-  // Screen transition with voice prompt & adaptive clinical triage
-  const goToScreen = useCallback((targetNum: number) => {
+  // Screen transition with voice prompt & permanent vitals bypass
+  const goToScreen = useCallback((targetNum: number, overrideLang?: 'en' | 'hi') => {
     let target = Math.max(1, Math.min(51, targetNum));
-    // Intelligent clinical skip: if cold/minor symptoms, bypass vitals screens (28 to 33)
-    if (skipMeasurements && target >= 28 && target <= 33) {
-      console.log("[MediKiosk] Clinically skipping vitals for cold symptoms -> advancing to documents (Screen 34)");
+    // Permanent vitals bypass: Kiosk has no ability to measure vitals currently
+    if (target >= 28 && target <= 33) {
+      console.log("[MediKiosk] Kiosk has no vitals hardware -> permanently bypassing vitals screens (28 to 33) to Document Scan (Screen 34)");
       target = 34;
     }
 
@@ -120,8 +133,9 @@ export default function App() {
     setCurrentScreen(targetId);
     voiceAgentRef.current?.setActiveScreen(targetId);
 
+    const activeLang = overrideLang || currentLangRef.current;
     const meta = SCREEN_CATALOG[targetId] || SCREEN_CATALOG.s1;
-    const prompt = langCode === 'hi' ? meta.speechHi : meta.speechEn;
+    const prompt = activeLang === 'hi' ? meta.speechHi : meta.speechEn;
     if (voiceAgentRef.current) {
       voiceAgentRef.current.speak(prompt);
     } else if (geminiLiveRef.current) {
@@ -131,17 +145,18 @@ export default function App() {
     if (target === 44 || target === 47) {
       handleIntakeSubmit();
     }
-  }, [skipMeasurements, langCode]);
+  }, []);
 
-  const goTo = useCallback((screenId: ScreenId) => {
-    goToScreen(getScreenNum(screenId));
+  const goTo = useCallback((screenId: ScreenId, overrideLang?: 'en' | 'hi') => {
+    goToScreen(getScreenNum(screenId), overrideLang);
   }, [goToScreen]);
 
   // Submit patient intake to Django backend
   const handleIntakeSubmit = async () => {
     try {
       setHisPushStatus('pushing');
-      const response = await submitPatientIntake(patientData);
+      const dataToSend = patientDataRef.current;
+      const response = await submitPatientIntake(dataToSend);
       if (response && response.queue_token) {
         setPatientData(prev => ({
           ...prev,
@@ -196,10 +211,12 @@ export default function App() {
         goTo(targetScreen);
       },
       onLanguageSelect: (lang) => {
-        setSelectedLanguage(lang === 'hi' ? 'हिंदी' : 'English');
-        voiceAgent.setLanguage(lang);
+        setAppLanguage(lang);
       },
-      onClinicalComplaintExtracted: (complaint, duration, severity, redFlag, skip) => {
+      onPatientNameExtracted: (name) => {
+        setPatientData(prev => ({ ...prev, name }));
+      },
+      onClinicalComplaintExtracted: (complaint, duration, severity, redFlag, skip, hpi) => {
         setTypedComplaint(complaint);
         const shouldSkip = !!skip;
         setSkipMeasurements(shouldSkip);
@@ -207,7 +224,7 @@ export default function App() {
         setPatientData(prev => ({
           ...prev,
           chiefComplaint: complaint,
-          hpi: `${complaint}. Duration: ${duration || '1-2 days'}. Severity: ${severity || 'Moderate'}.`,
+          hpi: hpi || `${complaint}. Duration: ${duration || '1-2 days'}. Severity: ${severity || 'Moderate'}.`,
           redFlags: redFlag ? [
             { symptom: complaint, severity: 'High - Immediate Physician Triage', badgeType: 'red' }
           ] : prev.redFlags
@@ -228,6 +245,7 @@ export default function App() {
     geminiLiveRef.current = liveService;
     geminiOcrRef.current = ocrService;
     voiceAgentRef.current = voiceAgent;
+    (window as any).__medikioskVoice = voiceAgent;
 
     return () => {
       liveService.disconnect();
@@ -470,11 +488,11 @@ export default function App() {
                   screenNum={currentScreenNum}
                   onNavigate={(target) => goToScreen(target)}
                   onLanguageSelect={(lang) => {
-                    setSelectedLanguage(lang === 'hi' ? 'हिंदी' : 'English');
-                    voiceAgentRef.current?.setLanguage(lang);
+                    setAppLanguage(lang);
+                    goToScreen(4, lang);
                   }}
                   onConsentGiven={(agree) => {
-                    if (agree) goToScreen(5);
+                    if (agree) goToScreen(12);
                     else goToScreen(1);
                   }}
                   selectedLanguage={langCode}
@@ -502,6 +520,11 @@ export default function App() {
                   screenNum={currentScreenNum}
                   onNavigate={(target) => goToScreen(target)}
                   selectedLanguage={langCode}
+                  patientName={patientData.name}
+                  onNameChange={(name) => {
+                    setPatientData(prev => ({ ...prev, name }));
+                    voiceAgentRef.current?.setPatientName(name);
+                  }}
                   onPhotoCaptured={(_photo) => {
                     console.log("[MediKiosk] Profile photo recorded");
                   }}
@@ -515,6 +538,7 @@ export default function App() {
                   screenNum={currentScreenNum}
                   onNavigate={(target) => goToScreen(target)}
                   selectedLanguage={langCode}
+                  patientName={patientData.name}
                   chiefComplaint={typedComplaint}
                   onComplaintExtracted={(complaint, skipVitals) => {
                     setTypedComplaint(complaint);
@@ -567,6 +591,7 @@ export default function App() {
                   onNavigate={(target) => goToScreen(target)}
                   selectedLanguage={langCode}
                   patientToken={patientData.token}
+                  patientName={patientData.name}
                   onCheckinComplete={() => {
                     goToScreen(1);
                   }}
@@ -821,6 +846,13 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Real-time Communication & API Diagnostics Drawer */}
+      <LiveDiagnosticsDrawer 
+        voiceState={voiceState}
+        currentLanguage={langCode}
+        activeScreen={currentScreen}
+      />
     </div>
   );
 }

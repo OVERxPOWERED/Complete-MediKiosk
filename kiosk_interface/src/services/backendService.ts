@@ -24,9 +24,9 @@ export async function submitPatientIntake(patient: PatientData): Promise<IntakeR
     gender: patient.gender,
     phone: patient.phone,
     address: patient.address || 'Bengaluru, Karnataka',
-    uhid: patient.uhid || `HSP${Math.floor(100000 + Math.random() * 900000)}`,
+    uhid: (patient.uhid && patient.uhid !== 'HSP123456') ? patient.uhid : `HSP${Math.floor(100000 + Math.random() * 900000)}`,
     abha_id: patient.abha || '91-4521-8890-1234',
-    token: patient.token || `A10${Math.floor(50 + Math.random() * 49)}`,
+    token: (patient.token && patient.token !== 'A1054') ? patient.token : `A10${Math.floor(50 + Math.random() * 49)}`,
     chief_complaint: patient.chiefComplaint || 'Fever and headache since yesterday',
     history_of_present_illness: patient.hpi || 'Patient reported low-grade fever with frontal headache for 24 hours.',
     vitals: {

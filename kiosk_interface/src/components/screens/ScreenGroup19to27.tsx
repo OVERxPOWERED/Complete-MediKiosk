@@ -19,6 +19,7 @@ interface ScreenGroup19to27Props {
   screenNum: number;
   onNavigate: (target: number) => void;
   selectedLanguage: 'en' | 'hi';
+  patientName?: string;
   chiefComplaint: string;
   onComplaintExtracted?: (complaint: string, skipVitals?: boolean) => void;
   onPlaySpeechAloud?: (text: string) => void;
@@ -28,6 +29,7 @@ export const ScreenGroup19to27: React.FC<ScreenGroup19to27Props> = ({
   screenNum,
   onNavigate,
   selectedLanguage,
+  patientName,
   chiefComplaint = 'Cold and runny nose',
   onComplaintExtracted,
   onPlaySpeechAloud,
@@ -237,11 +239,19 @@ export const ScreenGroup19to27: React.FC<ScreenGroup19to27Props> = ({
 
   // SCREEN 22: Confirm Chief Complaint (s22.png)
   if (screenNum === 22) {
+    const quoteText = chiefComplaint 
+      ? (isHi 
+          ? `${patientName ? `${patientName} जी, ` : ''}आपको ${chiefComplaint} की समस्या है।` 
+          : `${patientName ? `${patientName}, ` : ''}you reported: ${chiefComplaint}.`)
+      : (isHi ? 'आपको सिरदर्द और बुखार की शिकायत है।' : 'You reported fever and headache since yesterday.');
+
     return (
       <div className="screen-container s22-confirm-screen">
         <div className="white-surface-card confirm-complaint-card">
           <h3 className="confirm-card-heading">
-            {isHi ? 'मैंने यह समझा...' : 'I heard that...'}
+            {patientName 
+              ? (isHi ? `${patientName} जी, मैंने यह समझा...` : `${patientName}, I heard that...`)
+              : (isHi ? 'मैंने यह समझा...' : 'I heard that...')}
           </h3>
           <p className="confirm-card-sub">
             {isHi ? 'कृपया पुष्टि करें कि क्या यह सही है।' : 'Please confirm if this is correct.'}
@@ -251,9 +261,7 @@ export const ScreenGroup19to27: React.FC<ScreenGroup19to27Props> = ({
           <div className="green-quote-box">
             <span className="quote-mark left">“</span>
             <p className="quote-content">
-              {isHi 
-                ? 'आपको कल से सर्दी, ज़ुकाम और हल्का बुखार है।' 
-                : 'You have been having a cold and mild fever since yesterday.'}
+              {quoteText}
             </p>
             <span className="quote-mark right">”</span>
           </div>
@@ -268,7 +276,7 @@ export const ScreenGroup19to27: React.FC<ScreenGroup19to27Props> = ({
 
             <button 
               className="play-again-pill-btn"
-              onClick={() => onPlaySpeechAloud?.(isHi ? 'आपको कल से सर्दी, ज़ुकाम और हल्का बुखार है।' : 'You have been having a cold and mild fever since yesterday.')}
+              onClick={() => onPlaySpeechAloud?.(quoteText)}
             >
               <Volume2 size={16} />
               <span>{isHi ? 'दोबारा सुनें' : 'Play again'}</span>
@@ -279,12 +287,12 @@ export const ScreenGroup19to27: React.FC<ScreenGroup19to27Props> = ({
           <div className="s22-actions-row">
             <button 
               className="s22-btn success"
-              onClick={() => onNavigate(23)}
+              onClick={() => onNavigate(44)}
             >
               <Check size={20} />
               <div className="btn-label-col">
                 <span className="btn-head">{isHi ? 'हाँ, यह सही है' : "Yes, that's right"}</span>
-                <span className="btn-sub">{isHi ? 'अगले सवाल पर जाएं' : 'Continue to next question'}</span>
+                <span className="btn-sub">{isHi ? 'विज़िट टोकन प्राप्त करें' : 'Proceed to Visit Token'}</span>
               </div>
             </button>
 

@@ -215,7 +215,6 @@ export const ScreenGroup1to4: React.FC<ScreenGroup1to4Props> = ({
               className={`language-card ${(selectedLanguage === lang.id) ? 'selected' : ''}`}
               onClick={() => {
                 onLanguageSelect(lang.id === 'hi' ? 'hi' : 'en');
-                onNavigate(4);
               }}
               role="button"
               tabIndex={0}

@@ -17,6 +17,8 @@ interface ScreenGroup12to18Props {
   screenNum: number;
   onNavigate: (target: number) => void;
   selectedLanguage: 'en' | 'hi';
+  patientName?: string;
+  onNameChange?: (name: string) => void;
   onPhotoCaptured?: (dataUrl: string) => void;
 }
 
@@ -24,14 +26,22 @@ export const ScreenGroup12to18: React.FC<ScreenGroup12to18Props> = ({
   screenNum,
   onNavigate,
   selectedLanguage,
+  patientName: propPatientName,
+  onNameChange,
   onPhotoCaptured,
 }) => {
   const isHi = selectedLanguage === 'hi';
-  const [patientName, setPatientName] = useState('Rohit Mehta');
+  const [patientName, setPatientName] = useState(propPatientName || '');
   const [patientAge, setPatientAge] = useState('38');
   const [patientGender, setPatientGender] = useState('Male');
   const [phoneNumber, setPhoneNumber] = useState('9876543210');
   const [otpCode, setOtpCode] = useState('4821');
+
+  React.useEffect(() => {
+    if (propPatientName) {
+      setPatientName(propPatientName);
+    }
+  }, [propPatientName]);
 
   const handlePhoneKeypad = (val: string) => {
     if (val === 'backspace') {
@@ -51,6 +61,12 @@ export const ScreenGroup12to18: React.FC<ScreenGroup12to18Props> = ({
 
   // SCREEN 12: Name Input (s12.png)
   if (screenNum === 12) {
+    const handleContinue = () => {
+      const finalName = patientName.trim() || (isHi ? 'अमित कुमार' : 'Amit Kumar');
+      onNameChange?.(finalName);
+      onNavigate(20);
+    };
+
     return (
       <div className="screen-container s12-name-screen">
         <div className="white-surface-card name-input-card">
@@ -61,8 +77,11 @@ export const ScreenGroup12to18: React.FC<ScreenGroup12to18Props> = ({
             type="text"
             className="large-text-input"
             value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-            placeholder={isHi ? 'नाम दर्ज करें' : 'Enter full name'}
+            onChange={(e) => {
+              setPatientName(e.target.value);
+              onNameChange?.(e.target.value);
+            }}
+            placeholder={isHi ? 'अपना नाम दर्ज करें या बोलकर बताएं' : 'Enter your name or speak aloud'}
           />
 
           <div className="s12-input-modes-grid">
@@ -71,8 +90,8 @@ export const ScreenGroup12to18: React.FC<ScreenGroup12to18Props> = ({
                 <Mic size={24} color="#059669" />
               </div>
               <div className="mode-texts">
-                <h4>{isHi ? 'बोलकर बताएं' : 'Tap to speak'}</h4>
-                <p>{isHi ? 'मैं सुन रहा हूँ...' : "I'm listening..."}</p>
+                <h4>{isHi ? 'बोलकर बताएं' : 'Speak your name'}</h4>
+                <p>{isHi ? 'माइक खुला है, अपना नाम बोलें...' : "Mic active, speak your name..."}</p>
               </div>
             </div>
 
@@ -86,6 +105,15 @@ export const ScreenGroup12to18: React.FC<ScreenGroup12to18Props> = ({
               </div>
             </div>
           </div>
+
+          <button 
+            className="s2-start-pill-btn"
+            style={{ width: '100%', marginTop: '20px' }}
+            onClick={handleContinue}
+          >
+            <span>{isHi ? 'बीमारी बताएं / आगे बढ़ें' : 'Continue to Symptoms'}</span>
+            <ArrowRight size={20} />
+          </button>
         </div>
       </div>
     );

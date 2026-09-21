@@ -1,4 +1,7 @@
 # Dependencies
+.venv/
+.venv
+.vscode/
 kiosk_interface/node_modules/
 doctor-interface/node_modules/
 

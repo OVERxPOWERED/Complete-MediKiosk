@@ -1,0 +1,16 @@
+npm notice run doctor-interface@0.1.0 dev
+npm notice run next dev --port 3000
+▲ Next.js 16.3.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.110.250.209:3000
+- Environments: .env.local
+✓ Ready in 779ms
+✓ Running next.config.ts took 137ms
+
+ GET / 200 in 2.2s (next.js: 849ms, application-code: 1337ms)
+ GET /queue 200 in 373ms (next.js: 106ms, application-code: 267ms)
+ GET /queue 200 in 184ms (next.js: 26ms, application-code: 157ms)
+ GET /login 200 in 351ms (next.js: 51ms, application-code: 300ms)
+ GET /queue 200 in 119ms (next.js: 19ms, application-code: 100ms)
+ GET /patient/A1052 200 in 1816ms (next.js: 1653ms, application-code: 163ms)
+ GET /patient/A1052 200 in 183ms (next.js: 61ms, application-code: 123ms)
