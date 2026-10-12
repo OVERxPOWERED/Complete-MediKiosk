@@ -1,138 +1,188 @@
+import uuid
 from django.db import models
+from django.core.validators import RegexValidator, ValidationError
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
+
+class PatientManager(models.Manager):
+    """Custom manager for Patient model with active queryset filter."""
+
+    def active(self):
+        """Return only non-deleted, active patients."""
+        return self.filter(is_active=True, deleted_at__isnull=True)
+
+    def with_deleted(self):
+        """Return all patients including soft-deleted ones."""
+        return self.all()
+
+    def deleted_only(self):
+        """Return only soft-deleted patients."""
+        return self.filter(deleted_at__isnull=False)
+
 
 class Patient(models.Model):
-    uhid = models.CharField(max_length=50, unique=True)
-    abha_id = models.CharField(max_length=50, blank=True)
-    queue_token = models.CharField(max_length=20, unique=True)
-    name = models.CharField(max_length=150)
-    age = models.IntegerField()
-    gender = models.CharField(max_length=20)
-    phone = models.CharField(max_length=50, blank=True)
-    address = models.TextField(blank=True)
-    photo_url = models.TextField(blank=True)
-    attendant = models.CharField(max_length=50, default='Self')
-    emergency_name = models.CharField(max_length=150, blank=True)
-    emergency_relation = models.CharField(max_length=50, blank=True)
-    emergency_phone = models.CharField(max_length=50, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    """
+    Core Patient domain model with medical record fields, audit timestamps,
+    and soft-delete pattern matching backend contracts.
+    """
 
-    def __str__(self):
-        return f"{self.name} ({self.queue_token})"
-
-class Vitals(models.Model):
-    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='vitals')
-    
-    # Blood Pressure
-    bp_value = models.CharField(max_length=50, default='120/80 mmHg')
-    bp_source = models.CharField(max_length=50, default='kiosk_device')
-    bp_timestamp = models.CharField(max_length=100, default='Kiosk · 09:12 AM')
-    bp_is_abnormal = models.BooleanField(default=False)
-
-    # Blood Sugar
-    sugar_value = models.CharField(max_length=50, default='100 mg/dL')
-    sugar_source = models.CharField(max_length=50, default='self_reported')
-    sugar_timestamp = models.CharField(max_length=100, default='Self reported · 09:10 AM')
-
-    # Blood Group
-    blood_group_value = models.CharField(max_length=10, default='B+')
-    blood_group_source = models.CharField(max_length=50, default='self_reported')
-
-    # SpO2
-    spo2_value = models.CharField(max_length=50, default='98 %')
-    spo2_source = models.CharField(max_length=50, default='kiosk_device')
-    spo2_timestamp = models.CharField(max_length=100, default='Kiosk · 09:12 AM')
-
-    # Pulse
-    pulse_value = models.CharField(max_length=50, default='72 bpm')
-    pulse_source = models.CharField(max_length=50, default='kiosk_device')
-    pulse_timestamp = models.CharField(max_length=100, default='Kiosk · 09:12 AM')
-
-    # Temperature
-    temp_value = models.CharField(max_length=50, default='98.6 °F')
-    temp_source = models.CharField(max_length=50, default='kiosk_device')
-    temp_timestamp = models.CharField(max_length=100, default='Kiosk · 09:12 AM')
-
-    # Weight
-    weight_value = models.CharField(max_length=50, default='65 kg')
-    weight_source = models.CharField(max_length=50, default='kiosk_device')
-    weight_timestamp = models.CharField(max_length=100, default='Kiosk · 09:12 AM')
-
-    def __str__(self):
-        return f"Vitals for {self.patient.name}"
-
-class ClinicalSummary(models.Model):
-    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='clinical_summary')
-    chief_complaint = models.TextField()
-    history_of_present_illness = models.TextField()
-    past_history = models.JSONField(default=list)
-    allergy_name = models.CharField(max_length=150, default='NKDA')
-    allergy_reaction = models.CharField(max_length=150, default='None')
-    current_meds = models.JSONField(default=list)
-    family_history = models.JSONField(default=list)
-    personal_history = models.JSONField(default=list)
-    review_of_systems = models.JSONField(default=dict)
-    prior_investigations_summary = models.JSONField(default=list)
-
-    # AYUSH Section
-    prakriti = models.CharField(max_length=100, default='Vata-Pitta')
-    vikriti = models.CharField(max_length=100, default='Vata aggravation')
-    agni = models.CharField(max_length=100, default='Madhyama')
-    koshtha = models.CharField(max_length=100, default='Madhyama')
-
-    def __str__(self):
-        return f"Clinical Summary for {self.patient.name}"
-
-class RedFlag(models.Model):
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='red_flags')
-    symptom = models.TextField()
-    severity = models.CharField(max_length=50, default='Needs attention')
-    badge_label = models.CharField(max_length=100, default='Critical')
-    badge_type = models.CharField(max_length=20, default='red') # red, amber
-    is_active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return f"RedFlag: {self.badge_label} for {self.patient.queue_token}"
-
-class ScannedDocument(models.Model):
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='documents')
-    doc_id = models.CharField(max_length=100)
-    doc_type = models.CharField(max_length=150)
-    subtitle = models.CharField(max_length=150, blank=True)
-    pages = models.IntegerField(default=1)
-    date = models.CharField(max_length=50)
-    time = models.CharField(max_length=50, blank=True)
-    file_id = models.CharField(max_length=100)
-    source = models.CharField(max_length=150, default='MediKiosk (Patient Scan)')
-    impression = models.TextField(blank=True)
-    signatory = models.CharField(max_length=200, blank=True)
-    preview_url = models.TextField(blank=True)
-    pages_list = models.JSONField(default=list)
-    is_flagged_rescan = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"{self.doc_type} ({self.doc_id}) for {self.patient.name}"
-
-class DocumentAnnotation(models.Model):
-    document = models.ForeignKey(ScannedDocument, on_delete=models.CASCADE, related_name='annotations')
-    doctor_name = models.CharField(max_length=150, default='Dr. Anjali Verma')
-    note_text = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Annotation by {self.doctor_name} on {self.document.doc_type}"
-
-class QueueItem(models.Model):
-    STATUS_CHOICES = [
-        ('New', 'New'),
-        ('Reviewed', 'Reviewed'),
+    GENDER_CHOICES = [
+        ('M', _('Male')),
+        ('F', _('Female')),
+        ('O', _('Other')),
+        ('U', _('Unknown')),
     ]
-    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='queue_item')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='New')
-    queue_number = models.IntegerField(default=1)
-    wait_time = models.CharField(max_length=50, default='5 min')
-    arrived_at = models.CharField(max_length=50, default='09:12 AM')
-    reviewed_at = models.CharField(max_length=100, blank=True, null=True)
+
+    BLOOD_TYPE_CHOICES = [
+        ('A+', 'A+'),
+        ('A-', 'A-'),
+        ('B+', 'B+'),
+        ('B-', 'B-'),
+        ('AB+', 'AB+'),
+        ('AB-', 'AB-'),
+        ('O+', 'O+'),
+        ('O-', 'O-'),
+        ('UNKNOWN', 'Unknown'),
+    ]
+
+    # Primary key
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Medical Record Number with validator
+    mrn_validator = RegexValidator(
+        regex=r'^MRN-\d{8}-\d{4}$',
+        message=_('MRN must be in format: MRN-YYYYMMDD-XXXX')
+    )
+    mrn = models.CharField(
+        _('Medical Record Number'),
+        max_length=20,
+        unique=True,
+        validators=[mrn_validator],
+        db_index=True,
+        help_text=_('Format: MRN-YYYYMMDD-XXXX')
+    )
+
+    # Personal Information
+    first_name = models.CharField(_('First Name'), max_length=100)
+    last_name = models.CharField(_('Last Name'), max_length=100)
+    date_of_birth = models.DateField(_('Date of Birth'))
+    gender = models.CharField(
+        _('Gender'),
+        max_length=1,
+        choices=GENDER_CHOICES,
+        default='U'
+    )
+
+    # Contact Information
+    phone = models.CharField(
+        _('Phone Number'),
+        max_length=20,
+        blank=True,
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message=_('Phone number must be entered in format: +999999999. Up to 15 digits allowed.')
+            )
+        ]
+    )
+    email = models.EmailField(_('Email Address'), blank=True, max_length=254)
+    address = models.TextField(_('Address'), blank=True)
+
+    # Emergency Contact (JSON for flexibility)
+    emergency_contact = models.JSONField(
+        _('Emergency Contact'),
+        default=dict,
+        blank=True,
+        help_text=_('JSON object with name, relationship, phone, email')
+    )
+
+    # Medical Information
+    blood_type = models.CharField(
+        _('Blood Type'),
+        max_length=10,
+        choices=BLOOD_TYPE_CHOICES,
+        default='UNKNOWN',
+        blank=True
+    )
+    allergies = models.JSONField(
+        _('Allergies'),
+        default=list,
+        blank=True,
+        help_text=_('List of allergy objects: [{"allergen": "penicillin", "reaction": "rash", "severity": "moderate"}]')
+    )
+    chronic_conditions = models.JSONField(
+        _('Chronic Conditions'),
+        default=list,
+        blank=True,
+        help_text=_('List of condition objects: [{"condition": "diabetes", "diagnosed_date": "2020-01-15", "status": "active"}]')
+    )
+
+    # Status & Soft Delete
+    is_active = models.BooleanField(_('Active'), default=True)
+    created_at = models.DateTimeField(_('Created At'), auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(_('Updated At'), auto_now=True)
+    deleted_at = models.DateTimeField(_('Deleted At'), null=True, blank=True, db_index=True)
+
+    # Custom Manager
+    objects = PatientManager()
+
+    class Meta:
+        db_table = 'patients_patient'
+        verbose_name = _('Patient')
+        verbose_name_plural = _('Patients')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['last_name', 'first_name'], name='patient_name_idx'),
+            models.Index(fields=['date_of_birth'], name='patient_dob_idx'),
+            models.Index(fields=['is_active', 'deleted_at'], name='patient_status_idx'),
+            models.Index(fields=['phone'], name='patient_phone_idx'),
+            models.Index(fields=['email'], name='patient_email_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(date_of_birth__lte=timezone.now().date()),
+                name='patient_dob_not_future'
+            ),
+        ]
 
     def __str__(self):
-        return f"Queue #{self.queue_number}: {self.patient.name} ({self.status})"
+        return f"{self.get_full_name()} ({self.mrn})"
+
+    def get_full_name(self):
+        """Return the patient's full name."""
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def get_age(self):
+        """Calculate patient's age from date of birth."""
+        today = timezone.now().date()
+        born = self.date_of_birth
+        return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+    def soft_delete(self):
+        """Soft delete the patient by setting deleted_at timestamp."""
+        self.deleted_at = timezone.now()
+        self.is_active = False
+        self.save(update_fields=['deleted_at', 'is_active', 'updated_at'])
+
+    def restore(self):
+        """Restore a soft-deleted patient."""
+        self.deleted_at = None
+        self.is_active = True
+        self.save(update_fields=['deleted_at', 'is_active', 'updated_at'])
+
+    def clean(self):
+        """Model-level validation."""
+        super().clean()
+        if self.date_of_birth and self.date_of_birth > timezone.now().date():
+            raise ValidationError({'date_of_birth': _('Date of birth cannot be in the future.')})
+
+    def save(self, *args, **kwargs):
+        """Override save to ensure validation runs."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_deleted(self):
+        """Check if patient is soft-deleted."""
+        return self.deleted_at is not None
