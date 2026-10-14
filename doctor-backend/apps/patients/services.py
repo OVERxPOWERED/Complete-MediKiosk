@@ -4,18 +4,41 @@ from django.db.models import Q
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.utils import timezone
 from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime, timedelta
 
-from apps.patients.models import Patient
+from apps.patients.models import (
+    Patient,
+    Appointment,
+    MedicalRecord,
+    Prescription,
+    MedicalRecordAttachment,
+)
 from apps.patients.validators import (
     validate_patient_data,
     validate_patient_update_data,
     validate_search_filters,
+    validate_appointment_data,
+    validate_appointment_update_data,
+    validate_medical_record_data,
+    validate_prescription_data,
+    validate_prescription_renewal_data,
 )
 from apps.patients.selectors import (
     patient_get_by_id,
     patient_list,
     patient_search,
     patient_get_history,
+    appointment_get_by_id,
+    appointment_list,
+    appointment_get_upcoming,
+    appointment_check_conflicts,
+    medical_record_get_by_id,
+    medical_record_list,
+    medical_record_get_patient_history,
+    prescription_get_by_id,
+    prescription_list,
+    prescription_get_active,
+    prescription_check_interactions,
 )
 from apps.core.exceptions import (
     ValidationError,
@@ -24,205 +47,168 @@ from apps.core.exceptions import (
 )
 
 
-class PatientService:
+class AppointmentService:
     """
-    Service layer for patient management operations.
-    Encapsulates business logic and coordinates between selectors, validators, and models.
+    Service layer for appointment management operations.
+    Encapsulates business logic for scheduling, rescheduling, and managing appointments.
     """
 
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 100
+    MIN_ADVANCE_BOOKING_MINUTES = 30
+    MAX_ADVANCE_BOOKING_DAYS = 365
 
     @transaction.atomic
-    def create_patient(self, validated_data: Dict[str, Any]) -> Patient:
+    def schedule_appointment(self, validated_data: Dict[str, Any]) -> Appointment:
         """
-        Create a new patient record with validated data.
+        Schedule a new appointment with validated data.
 
         Args:
-            validated_data: Dictionary containing patient data (already validated)
+            validated_data: Dictionary containing appointment data (already validated)
 
         Returns:
-            Created Patient instance
+            Created Appointment instance
 
         Raises:
             ValidationError: If data validation fails
-            BusinessLogicError: If business rules are violated (e.g., duplicate MRN)
+            BusinessLogicError: If business rules are violated (e.g., time conflict, past date)
         """
-        validate_patient_data(validated_data)
+        validate_appointment_data(validated_data)
 
-        mrn = validated_data.get("medical_record_number")
-        if mrn and Patient.objects.filter(medical_record_number=mrn, is_deleted=False).exists():
-            raise BusinessLogicError(
-                f"Patient with medical record number '{mrn}' already exists.",
-                code="DUPLICATE_MRN",
-            )
+        patient_id = validated_data["patient_id"]
+        provider_id = validated_data["provider_id"]
+        scheduled_at = validated_data["scheduled_at"]
+        duration_minutes = validated_data.get("duration_minutes", 30)
 
-        email = validated_data.get("email")
-        if email and Patient.objects.filter(email__iexact=email, is_deleted=False).exists():
-            raise BusinessLogicError(
-                f"Patient with email '{email}' already exists.",
-                code="DUPLICATE_EMAIL",
-            )
-
-        patient = Patient.objects.create(**validated_data)
-        return patient
-
-    def get_patient(self, patient_id: int) -> Patient:
-        """
-        Retrieve a patient by ID.
-
-        Args:
-            patient_id: Primary key of the patient
-
-        Returns:
-            Patient instance
-
-        Raises:
-            NotFoundError: If patient not found or is deleted
-        """
         patient = patient_get_by_id(patient_id)
         if not patient:
             raise NotFoundError(f"Patient with ID {patient_id} not found.", code="PATIENT_NOT_FOUND")
-        return patient
 
-    @transaction.atomic
-    def update_patient(self, patient_id: int, data: Dict[str, Any]) -> Patient:
+        now = timezone.now()
+        if scheduled_at < now + timedelta(minutes=self.MIN_ADVANCE_BOOKING_MINUTES):
+            raise BusinessLogicError(
+                f"Appointments must be scheduled at least {self.MIN_ADVANCE_BOOKING_MINUTES} minutes in advance.",
+                code="INSUFFICIENT_ADVANCE_NOTICE",
+            )
+
+        if scheduled_at > now + timedelta(days=self.MAX_ADVANCE_BOOKING_DAYS):
+            raise BusinessLogicError(
+                f"Appointments cannot be scheduled more than {self.MAX_ADVANCE_BOOKING_DAYS} days in advance.",
+                code="EXCEEDS_MAX_ADVANCE_BOOKING",
+            )
+
+        if appointment_check_conflicts(provider_id, scheduled_at, duration_minutes):
+            raise BusinessLogicError(
+                "Provider has a conflicting appointment at the requested time.",
+                code="PROVIDER_CONFLICT",
+            )
+
+        if appointment_check_conflicts(patient_id, scheduled_at, duration_minutes, is_patient=True):
+            raise BusinessLogicError(
+                "Patient has a conflicting appointment at the requested time.",
+                code="PATIENT_CONFLICT",
+            )
+
+        appointment = Appointment.objects.create(
+            patient=patient,
+            provider_id=provider_id,
+            scheduled_at=scheduled_at,
+            duration_minutes=duration_minutes,
+            status=Appointment.Status.SCHEDULED,
+            appointment_type=validated_data.get("appointment_type", Appointment.Type.CONSULTATION),
+            notes=validated_data.get("notes", ""),
+            reason=validated_data.get("reason", ""),
+        )
+        return appointment
+
+    def get_appointment(self, appointment_id: int) -> Appointment:
         """
-        Update an existing patient record.
+        Retrieve an appointment by ID.
 
         Args:
-            patient_id: Primary key of the patient to update
-            data: Dictionary containing fields to update
+            appointment_id: Primary key of the appointment
 
         Returns:
-            Updated Patient instance
+            Appointment instance
 
         Raises:
-            NotFoundError: If patient not found
+            NotFoundError: If appointment not found
+        """
+        appointment = appointment_get_by_id(appointment_id)
+        if not appointment:
+            raise NotFoundError(f"Appointment with ID {appointment_id} not found.", code="APPOINTMENT_NOT_FOUND")
+        return appointment
+
+    @transaction.atomic
+    def reschedule_appointment(self, appointment_id: int, data: Dict[str, Any]) -> Appointment:
+        """
+        Reschedule an existing appointment.
+
+        Args:
+            appointment_id: Primary key of the appointment to reschedule
+            data: Dictionary containing new scheduled_at and optionally duration_minutes
+
+        Returns:
+            Updated Appointment instance
+
+        Raises:
+            NotFoundError: If appointment not found
             ValidationError: If validation fails
             BusinessLogicError: If business rules are violated
         """
-        patient = self.get_patient(patient_id)
+        appointment = self.get_appointment(appointment_id)
 
-        validate_patient_update_data(data, patient)
+        if appointment.status in [Appointment.Status.COMPLETED, Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW]:
+            raise BusinessLogicError(
+                f"Cannot reschedule appointment with status '{appointment.status}'.",
+                code="INVALID_STATUS_FOR_RESCHEDULE",
+            )
 
-        if "medical_record_number" in data:
-            new_mrn = data["medical_record_number"]
-            if Patient.objects.filter(
-                medical_record_number=new_mrn, is_deleted=False
-            ).exclude(pk=patient_id).exists():
-                raise BusinessLogicError(
-                    f"Patient with medical record number '{new_mrn}' already exists.",
-                    code="DUPLICATE_MRN",
-                )
+        validate_appointment_update_data(data, appointment)
 
-        if "email" in data:
-            new_email = data["email"]
-            if Patient.objects.filter(email__iexact=new_email, is_deleted=False).exclude(pk=patient_id).exists():
-                raise BusinessLogicError(
-                    f"Patient with email '{new_email}' already exists.",
-                    code="DUPLICATE_EMAIL",
-                )
+        new_scheduled_at = data.get("scheduled_at", appointment.scheduled_at)
+        new_duration = data.get("duration_minutes", appointment.duration_minutes)
 
-        for field, value in data.items():
-            if hasattr(patient, field) and field not in ("id", "created_at", "updated_at"):
-                setattr(patient, field, value)
+        now = timezone.now()
+        if new_scheduled_at < now + timedelta(minutes=self.MIN_ADVANCE_BOOKING_MINUTES):
+            raise BusinessLogicError(
+                f"Appointments must be scheduled at least {self.MIN_ADVANCE_BOOKING_MINUTES} minutes in advance.",
+                code="INSUFFICIENT_ADVANCE_NOTICE",
+            )
 
-        patient.updated_at = timezone.now()
-        patient.save(update_fields=list(data.keys()) + ["updated_at"])
+        if appointment_check_conflicts(
+            appointment.provider_id,
+            new_scheduled_at,
+            new_duration,
+            exclude_appointment_id=appointment_id,
+        ):
+            raise BusinessLogicError(
+                "Provider has a conflicting appointment at the requested time.",
+                code="PROVIDER_CONFLICT",
+            )
 
-        return patient
+        if appointment_check_conflicts(
+            appointment.patient_id,
+            new_scheduled_at,
+            new_duration,
+            exclude_appointment_id=appointment_id,
+            is_patient=True,
+        ):
+            raise BusinessLogicError(
+                "Patient has a conflicting appointment at the requested time.",
+                code="PATIENT_CONFLICT",
+            )
+
+        appointment.scheduled_at = new_scheduled_at
+        appointment.duration_minutes = new_duration
+        if "notes" in data:
+            appointment.notes = data["notes"]
+        if "reason" in data:
+            appointment.reason = data["reason"]
+        appointment.status = Appointment.Status.RESCHEDULED
+        appointment.save(update_fields=["scheduled_at", "duration_minutes", "notes", "reason", "status", "updated_at"])
+
+        return appointment
 
     @transaction.atomic
-    def soft_delete_patient(self, patient_id: int) -> Patient:
-        """
-        Soft delete a patient record (mark as deleted without removing from DB).
-
-        Args:
-            patient_id: Primary key of the patient to delete
-
-        Returns:
-            Deleted Patient instance
-
-        Raises:
-            NotFoundError: If patient not found
-            BusinessLogicError: If patient has active appointments or records preventing deletion
-        """
-        patient = self.get_patient(patient_id)
-
-        if hasattr(patient, "appointments") and patient.appointments.filter(
-            status__in=["scheduled", "confirmed", "in_progress"], is_deleted=False
-        ).exists():
-            raise BusinessLogicError(
-                "Cannot delete patient with active appointments.",
-                code="ACTIVE_APPOINTMENTS_EXIST",
-            )
-
-        if hasattr(patient, "medical_records") and patient.medical_records.filter(is_deleted=False).exists():
-            raise BusinessLogicError(
-                "Cannot delete patient with existing medical records. Archive records first.",
-                code="MEDICAL_RECORDS_EXIST",
-            )
-
-        patient.is_deleted = True
-        patient.deleted_at = timezone.now()
-        patient.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
-
-        return patient
-
-    def search_patients(
-        self,
-        query: Optional[str] = None,
-        filters: Optional[Dict[str, Any]] = None,
-        page: int = 1,
-        page_size: Optional[int] = None,
-        ordering: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Search and filter patients with pagination.
-
-        Args:
-            query: Free-text search query (searches name, MRN, email, phone)
-            filters: Dictionary of filter parameters
-            page: Page number (1-indexed)
-            page_size: Number of results per page
-            ordering: Field to order by (prefix with '-' for descending)
-
-        Returns:
-            Dictionary containing paginated results and metadata
-        """
-        validate_search_filters(filters or {})
-
-        page_size = min(page_size or self.DEFAULT_PAGE_SIZE, self.MAX_PAGE_SIZE)
-
-        queryset = patient_search(query=query, filters=filters)
-
-        if ordering:
-            valid_ordering_fields = [
-                "first_name", "last_name", "date_of_birth",
-                "medical_record_number", "created_at", "updated_at",
-                "-first_name", "-last_name", "-date_of_birth",
-                "-medical_record_number", "-created_at", "-updated_at",
-            ]
-            if ordering in valid_ordering_fields:
-                queryset = queryset.order_by(ordering)
-            else:
-                queryset = queryset.order_by("-created_at")
-        else:
-            queryset = queryset.order_by("-created_at")
-
-        paginator = Paginator(queryset, page_size)
-
-        try:
-            page_obj = paginator.page(page)
-        except PageNotAnInteger:
-            page_obj = paginator.page(1)
-        except EmptyPage:
-            page_obj = paginator.page(paginator.num_pages)
-
-        return {
-            "results": list(page_obj.object_list),
-            "pagination": {
-                "current_page": page_obj.number,
-                "total_pages": paginator.num_pages,
-                "total
+    def cancel_appointment(self, appointment
