@@ -1,148 +1,188 @@
 ```python
 """
-Core validation utilities for the Doctor Backend application.
+Patient Data Validators
 
-Provides environment guardrails, input validation, and sanitization
-for secure parameter handling across the domain.
+Provides input sanitization and secure parameter validation for patient data
+including MRN format, PII protection, and medical data constraints.
 """
 
 import re
-import os
-from typing import Optional, List, Tuple
-from urllib.parse import urlparse
-
 import bleach
-import phonenumbers
-from phonenumbers import NumberParseException, PhoneNumberFormat
-from pydantic import BaseModel, field_validator, ValidationError
-
-from .exceptions import (
-    ValidationError as DomainValidationError,
-    InvalidPhoneNumberError,
-    InvalidAadhaarError,
-    InvalidDosageError,
-    InvalidAppointmentSlotError,
-    InvalidFileUploadError,
-    ConfigurationError,
-)
+from datetime import date, datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
 
 
-# =============================================================================
-# Phone Number Validation (Indian Format)
-# =============================================================================
+class ValidationErrorCode(str, Enum):
+    """Validation error codes matching frontend error handling."""
+    INVALID_MRN_FORMAT = "INVALID_MRN_FORMAT"
+    MRN_TOO_SHORT = "MRN_TOO_SHORT"
+    MRN_TOO_LONG = "MRN_TOO_LONG"
+    INVALID_DATE_OF_BIRTH = "INVALID_DATE_OF_BIRTH"
+    DATE_OF_BIRTH_FUTURE = "DATE_OF_BIRTH_FUTURE"
+    AGE_EXCEEDS_LIMIT = "AGE_EXCEEDS_LIMIT"
+    INVALID_BLOOD_TYPE = "INVALID_BLOOD_TYPE"
+    INVALID_GENDER = "INVALID_GENDER"
+    INVALID_PHONE_FORMAT = "INVALID_PHONE_FORMAT"
+    INVALID_EMAIL_FORMAT = "INVALID_EMAIL_FORMAT"
+    INVALID_SSN_FORMAT = "INVALID_SSN_FORMAT"
+    REQUIRED_FIELD_MISSING = "REQUIRED_FIELD_MISSING"
+    FIELD_TOO_LONG = "FIELD_TOO_LONG"
+    INVALID_CHARACTERS = "INVALID_CHARACTERS"
+    SANITIZATION_FAILED = "SANITIZATION_FAILED"
 
-INDIAN_PHONE_REGEX = re.compile(r"^(\+91|91|0)?[6-9]\d{9}$")
+
+class BloodType(str, Enum):
+    """Valid blood types."""
+    A_POS = "A+"
+    A_NEG = "A-"
+    B_POS = "B+"
+    B_NEG = "B-"
+    AB_POS = "AB+"
+    AB_NEG = "AB-"
+    O_POS = "O+"
+    O_NEG = "O-"
+    UNKNOWN = "UNKNOWN"
 
 
-def validate_phone_number(phone: str, region: str = "IN") -> str:
+class Gender(str, Enum):
+    """Valid gender values."""
+    MALE = "M"
+    FEMALE = "F"
+    OTHER = "O"
+    PREFER_NOT_TO_SAY = "P"
+    UNKNOWN = "U"
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    """Result of a validation operation."""
+    is_valid: bool
+    error_code: Optional[ValidationErrorCode] = None
+    error_message: Optional[str] = None
+    field_name: Optional[str] = None
+    sanitized_value: Optional[Any] = None
+
+
+@dataclass(frozen=True)
+class ValidationSummary:
+    """Summary of multiple validation results."""
+    is_valid: bool
+    results: List[ValidationResult]
+    errors: List[ValidationResult]
+
+    @property
+    def error_codes(self) -> List[ValidationErrorCode]:
+        return [r.error_code for r in self.errors if r.error_code]
+
+    @property
+    def error_messages(self) -> List[str]:
+        return [r.error_message for r in self.errors if r.error_message]
+
+
+# Configuration constants
+STRIP_COMMENTS = True
+MRN_MIN_LENGTH = 8
+MRN_MAX_LENGTH = 12
+MAX_AGE = 150
+MAX_FIELD_LENGTHS = {
+    "first_name": 50,
+    "last_name": 50,
+    "middle_name": 50,
+    "address_line1": 100,
+    "address_line2": 100,
+    "city": 50,
+    "state": 2,
+    "zip_code": 10,
+    "phone": 20,
+    "email": 254,
+    "ssn": 11,
+    "emergency_contact_name": 100,
+    "emergency_contact_phone": 20,
+    "insurance_provider": 100,
+    "insurance_policy_number": 50,
+    "insurance_group_number": 50,
+}
+
+# Bleach configuration for sanitization
+ALLOWED_TAGS = []
+ALLOWED_ATTRIBUTES = {}
+ALLOWED_PROTOCOLS = []
+STRIP_COMMENTS = True
+
+
+class PatientValidator:
     """
-    Validate and normalize an Indian phone number.
-
-    Args:
-        phone: Raw phone number string
-        region: ISO country code (default: "IN" for India)
-
-    Returns:
-        Normalized phone number in E.164 format (+91XXXXXXXXXX)
-
-    Raises:
-        InvalidPhoneNumberError: If the phone number is invalid
+    Validator for patient data with comprehensive input sanitization
+    and secure parameter validation.
     """
-    if not phone or not isinstance(phone, str):
-        raise InvalidPhoneNumberError("Phone number cannot be empty")
 
-    # Strip whitespace and common formatting characters
-    cleaned = re.sub(r"[\s\-\(\)]", "", phone.strip())
+    # MRN pattern: alphanumeric, 8-12 characters
+    MRN_PATTERN = re.compile(r'^[A-Za-z0-9]{8,12}$')
 
-    # Quick regex check for Indian format
-    if not INDIAN_PHONE_REGEX.match(cleaned):
-        raise InvalidPhoneNumberError(
-            f"Invalid Indian phone number format: {phone}. "
-            "Expected format: +91XXXXXXXXXX, 91XXXXXXXXXX, or 0XXXXXXXXXX"
-        )
+    # Phone pattern: supports various formats (US-focused)
+    PHONE_PATTERN = re.compile(
+        r'^(\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})$'
+    )
 
-    try:
-        parsed = phonenumbers.parse(cleaned, region)
-    except NumberParseException as e:
-        raise InvalidPhoneNumberError(f"Failed to parse phone number: {e}")
+    # Email pattern (RFC 5322 compliant simplified)
+    EMAIL_PATTERN = re.compile(
+        r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$'
+    )
 
-    if not phonenumbers.is_valid_number(parsed):
-        raise InvalidPhoneNumberError(f"Invalid phone number: {phone}")
+    # SSN pattern: XXX-XX-XXXX or XXXXXXXXX
+    SSN_PATTERN = re.compile(r'^\d{3}-?\d{2}-?\d{4}$')
 
-    if phonenumbers.region_code_for_number(parsed) != "IN":
-        raise InvalidPhoneNumberError("Phone number must be an Indian number (+91)")
+    # Date formats accepted
+    DATE_FORMATS = [
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%d/%m/%Y",
+        "%Y/%m/%d",
+        "%m-%d-%Y",
+        "%d-%m-%Y",
+    ]
 
-    # Return in E.164 format
-    return phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
+    @staticmethod
+    def validate_mrn_format(mrn: str) -> ValidationResult:
+        """
+        Validate Medical Record Number format.
 
+        Args:
+            mrn: The MRN string to validate
 
-# =============================================================================
-# Aadhaar Validation (Verhoeff Algorithm Checksum)
-# =============================================================================
+        Returns:
+            ValidationResult with validation status and details
+        """
+        if not mrn:
+            return ValidationResult(
+                is_valid=False,
+                error_code=ValidationErrorCode.REQUIRED_FIELD_MISSING,
+                error_message="MRN is required",
+                field_name="mrn"
+            )
 
-# Verhoeff algorithm tables
-VERHOEFF_D = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
-    [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
-    [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
-    [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
-    [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
-    [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
-    [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
-    [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
-    [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
-]
+        if not isinstance(mrn, str):
+            return ValidationResult(
+                is_valid=False,
+                error_code=ValidationErrorCode.INVALID_MRN_FORMAT,
+                error_message="MRN must be a string",
+                field_name="mrn"
+            )
 
-VERHOEFF_P = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
-    [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
-    [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
-    [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
-    [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
-    [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
-    [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
-]
+        mrn = mrn.strip()
 
-VERHOEFF_INV = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9]
+        if len(mrn) < MRN_MIN_LENGTH:
+            return ValidationResult(
+                is_valid=False,
+                error_code=ValidationErrorCode.MRN_TOO_SHORT,
+                error_message=f"MRN must be at least {MRN_MIN_LENGTH} characters",
+                field_name="mrn"
+            )
 
-
-def _verhoeff_checksum(digits: str) -> int:
-    """Calculate Verhoeff checksum for a digit string."""
-    c = 0
-    for i, ch in enumerate(reversed(digits)):
-        c = VERHOEFF_D[c][VERHOEFF_P[i % 8][int(ch)]]
-    return c
-
-
-def validate_aadhaar(aadhaar: str) -> str:
-    """
-    Validate an Aadhaar number using Verhoeff algorithm checksum.
-
-    Args:
-        aadhaar: 12-digit Aadhaar number (spaces/hyphens allowed)
-
-    Returns:
-        Cleaned 12-digit Aadhaar number
-
-    Raises:
-        InvalidAadhaarError: If the Aadhaar number is invalid
-    """
-    if not aadhaar or not isinstance(aadhaar, str):
-        raise InvalidAadhaarError("Aadhaar number cannot be empty")
-
-    # Remove spaces and hyphens
-    cleaned = re.sub(r"[\s\-]", "", aadhaar.strip())
-
-    # Must be exactly 12 digits
-    if not re.fullmatch(r"\d{12}", cleaned):
-        raise InvalidAadhaarError(
-            f"Aadhaar must be 12 digits, got: {cleaned}"
-        )
-
-    # First digit cannot be 0 or 1
-    if cleaned[0] in ("0", "1"):
-        raise InvalidAadhaarError("Aadhaar number cannot start with 0 or 1")
-
-    # Verify checksum (last digit is check digit)
+        if len(mrn) > MRN_MAX_LENGTH:
+            return ValidationResult(
+                is_valid=False,
+                error_code=ValidationErrorCode.MRN_TOO_LONG,
+                error_message=f"MRN must not exceed {MRN
