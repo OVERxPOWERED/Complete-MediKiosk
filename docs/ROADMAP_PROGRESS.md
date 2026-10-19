@@ -6,7 +6,7 @@
 ## Milestone 1: Architecture & Foundation
 - [x] Scaffold initial project structure and repository configuration
 - [ ] Implement core domain data models and type contracts
-- [ ] Configure environment guardrails and validation utilities
+- [x] Configure environment guardrails and validation utilities
 
 ## Milestone 2: Service Layer & Business Logic
 - [ ] Implement domain service handlers and business logic
@@ -16,10 +16,10 @@
 ## Milestone 3: Endpoints & Application Integration
 - [ ] Implement service API endpoints with schema validation
 - [ ] Add query caching layer and data access optimization
-- [ ] Configure system health checks and status diagnostics
+- [x] Configure system health checks and status diagnostics
 
 ## Milestone 4: Verification & Automated Testing
-- [ ] Implement automated unit test suites for core logic
+- [x] Implement automated unit test suites for core logic
 - [ ] Add integration assertions and boundary edge cases
 - [ ] Verify test suite green status and assertion benchmarks
 
@@ -28,5 +28,12 @@
 - [ ] Profile hot paths and apply performance indexing
 - [ ] Finalize production deployment verification checklist
 
+## API Documentation Scaffold
+- [ ] Set up drf-spectacular for OpenAPI 3 schema generation
+- [ ] Configure schema endpoints (/api/schema/, /api/docs/, /api/redoc/)
+- [ ] Add schema annotations to all ViewSets (extend_schema, OpenApiParameter)
+- [ ] Generate and commit API reference markdown
+
 ## Checkpoint History
 - **2026-10-05**: Initialized roadmap progress tracker with active project milestones.
+- **2026-10-05**: Completed environment guardrails and validation utilities (Milestone 1), implemented automated unit test suites for core logic (Milestone 4), configured system health checks and status diagnostics (Milestone 3). Added API Documentation Scaffold section for Milestone 5 deliverables.
