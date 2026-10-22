@@ -1,0 +1,32 @@
+# doctor-backend/requirements-test.txt
+# Test dependencies for the Doctor Backend project
+# Install with: pip install -r requirements-test.txt
+
+# Core testing framework
+pytest>=7.4.0
+pytest-django>=4.5.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+pytest-xdist>=3.3.0
+pytest-timeout>=2.1.0
+
+# Coverage reporting
+coverage>=7.3.0
+
+# Test data factories
+factory-boy>=3.3.0
+faker>=20.0.0
+
+# HTTP mocking
+responses>=0.23.0
+
+# Type checking
+mypy>=1.5.0
+django-stubs>=4.2.0
+types-requests>=2.31.0
+
+# Linting
+ruff>=0.1.0
+
+# Additional utilities
+freezegun>=1.2.0
