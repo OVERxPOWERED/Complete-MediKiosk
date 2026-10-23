@@ -17,6 +17,23 @@ class TimeStampedModel(models.Model):
         ordering = ['-created_at']
 
 
+class PatientManager(models.Manager):
+    """Custom manager for Patient with optimized querysets."""
+
+    def with_appointments(self):
+        return self.prefetch_related(
+            models.Prefetch('appointments', queryset=Appointment.objects.select_related('doctor'))
+        )
+
+    def with_medical_records(self):
+        return self.prefetch_related(
+            models.Prefetch('medical_records', queryset=MedicalRecord.objects.select_related('doctor', 'appointment'))
+        )
+
+    def active_patients(self):
+        return self.filter(appointments__status__in=[Appointment.Status.SCHEDULED, Appointment.Status.CHECKED_IN, Appointment.Status.IN_PROGRESS]).distinct()
+
+
 class Patient(TimeStampedModel):
     """Patient model representing a person receiving medical care."""
 
@@ -34,10 +51,13 @@ class Patient(TimeStampedModel):
         choices=Gender.choices,
         default=Gender.PREFER_NOT_TO_SAY
     )
-    phone = models.CharField(_('phone number'), max_length=20, blank=True)
-    email = models.EmailField(_('email address'), blank=True)
+    phone = models.CharField(_('phone number'), max_length=20, blank=True, db_index=True)
+    email = models.EmailField(_('email address'), blank=True, db_index=True)
     address = models.TextField(_('address'), blank=True)
+    insurance_id = models.CharField(_('insurance ID'), max_length=100, blank=True)
     medical_history = models.TextField(_('medical history'), blank=True)
+
+    objects = PatientManager()
 
     class Meta:
         db_table = 'patients'
@@ -47,6 +67,14 @@ class Patient(TimeStampedModel):
             models.Index(fields=['name'], name='patient_name_idx'),
             models.Index(fields=['email'], name='patient_email_idx'),
             models.Index(fields=['phone'], name='patient_phone_idx'),
+            models.Index(fields=['insurance_id'], name='patient_insurance_idx'),
+            models.Index(fields=['date_of_birth'], name='patient_dob_idx'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(date_of_birth__lte=timezone.now().date()),
+                name='patient_dob_not_future'
+            ),
         ]
 
     def __str__(self) -> str:
@@ -67,15 +95,43 @@ class Patient(TimeStampedModel):
         )
 
 
+class DoctorManager(models.Manager):
+    """Custom manager for Doctor with optimized querysets."""
+
+    def active(self):
+        return self.filter(is_active=True)
+
+    def by_specialization(self, specialization: str):
+        return self.active().filter(specialization__iexact=specialization)
+
+    def with_appointments(self):
+        return self.prefetch_related(
+            models.Prefetch('appointments', queryset=Appointment.objects.select_related('patient'))
+        )
+
+    def available_at(self, scheduled_at: timezone.datetime):
+        """Get doctors available at a specific time (no conflicting appointments)."""
+        return self.active().exclude(
+            appointments__scheduled_at__range=(
+                scheduled_at - timezone.timedelta(minutes=30),
+                scheduled_at + timezone.timedelta(minutes=30)
+            ),
+            appointments__status__in=[Appointment.Status.SCHEDULED, Appointment.Status.CHECKED_IN, Appointment.Status.IN_PROGRESS]
+        )
+
+
 class Doctor(TimeStampedModel):
     """Doctor model representing a medical practitioner."""
 
     name = models.CharField(_('full name'), max_length=255)
-    specialization = models.CharField(_('specialization'), max_length=100)
-    license_number = models.CharField(_('license number'), max_length=50, unique=True)
+    specialization = models.CharField(_('specialization'), max_length=100, db_index=True)
+    license_number = models.CharField(_('license number'), max_length=50, unique=True, db_index=True)
     phone = models.CharField(_('phone number'), max_length=20, blank=True)
     email = models.EmailField(_('email address'), blank=True)
-    is_active = models.BooleanField(_('active'), default=True)
+    department = models.CharField(_('department'), max_length=100, blank=True)
+    is_active = models.BooleanField(_('active'), default=True, db_index=True)
+
+    objects = DoctorManager()
 
     class Meta:
         db_table = 'doctors'
@@ -86,6 +142,8 @@ class Doctor(TimeStampedModel):
             models.Index(fields=['specialization'], name='doctor_spec_idx'),
             models.Index(fields=['is_active'], name='doctor_active_idx'),
             models.Index(fields=['license_number'], name='doctor_license_idx'),
+            models.Index(fields=['department'], name='doctor_dept_idx'),
+            models.Index(fields=['is_active', 'specialization'], name='doctor_active_spec_idx'),
         ]
 
     def __str__(self) -> str:
@@ -97,83 +155,22 @@ class Doctor(TimeStampedModel):
             self.license_number = self.license_number.strip().upper()
 
 
-class Appointment(TimeStampedModel):
-    """Appointment model representing a scheduled visit between patient and doctor."""
+class AppointmentManager(models.Manager):
+    """Custom manager for Appointment with optimized querysets."""
 
-    class Status(models.TextChoices):
-        SCHEDULED = 'SCHEDULED', _('Scheduled')
-        CHECKED_IN = 'CHECKED_IN', _('Checked In')
-        IN_PROGRESS = 'IN_PROGRESS', _('In Progress')
-        COMPLETED = 'COMPLETED', _('Completed')
-        CANCELLED = 'CANCELLED', _('Cancelled')
-        NO_SHOW = 'NO_SHOW', _('No Show')
+    def upcoming(self):
+        return self.filter(
+            scheduled_at__gte=timezone.now(),
+            status__in=[self.model.Status.SCHEDULED, self.model.Status.CHECKED_IN]
+        ).select_related('patient', 'doctor')
 
-    patient = models.ForeignKey(
-        Patient,
-        on_delete=models.PROTECT,
-        related_name='appointments',
-        verbose_name=_('patient')
-    )
-    doctor = models.ForeignKey(
-        Doctor,
-        on_delete=models.PROTECT,
-        related_name='appointments',
-        verbose_name=_('doctor')
-    )
-    scheduled_at = models.DateTimeField(_('scheduled at'), db_index=True)
-    duration_minutes = models.PositiveIntegerField(_('duration (minutes)'), default=30)
-    status = models.CharField(
-        _('status'),
-        max_length=20,
-        choices=Status.choices,
-        default=Status.SCHEDULED,
-        db_index=True
-    )
-    reason = models.TextField(_('reason for visit'), blank=True)
-    notes = models.TextField(_('notes'), blank=True)
+    def past(self):
+        return self.filter(
+            scheduled_at__lt=timezone.now()
+        ).select_related('patient', 'doctor')
 
-    class Meta:
-        db_table = 'appointments'
-        verbose_name = _('appointment')
-        verbose_name_plural = _('appointments')
-        indexes = [
-            models.Index(fields=['patient', 'scheduled_at'], name='appt_patient_time_idx'),
-            models.Index(fields=['doctor', 'scheduled_at'], name='appt_doctor_time_idx'),
-            models.Index(fields=['doctor', 'status', 'scheduled_at'], name='appt_doc_status_time_idx'),
-            models.Index(fields=['status', 'scheduled_at'], name='appt_status_time_idx'),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(duration_minutes__gt=0),
-                name='appointment_positive_duration'
-            ),
-            models.CheckConstraint(
-                check=models.Q(scheduled_at__gte=timezone.now()),
-                name='appointment_future_scheduled'
-            ),
-        ]
+    def by_status(self, status: str):
+        return self.filter(status=status).select_related('patient', 'doctor')
 
-    def __str__(self) -> str:
-        return f"{self.patient.name} - Dr. {self.doctor.name} at {self.scheduled_at:%Y-%m-%d %H:%M}"
-
-    def clean(self) -> None:
-        super().clean()
-        self._validate_no_overlap()
-        self._validate_doctor_active()
-        self._validate_duration()
-
-    def _validate_no_overlap(self) -> None:
-        """Ensure no overlapping appointments for the same doctor."""
-        if not self.doctor_id or not self.scheduled_at or not self.duration_minutes:
-            return
-
-        end_time = self.scheduled_at + timezone.timedelta(minutes=self.duration_minutes)
-
-        overlapping = Appointment.objects.filter(
-            doctor=self.doctor,
-            scheduled_at__lt=end_time,
-            status__in=[self.Status.SCHEDULED, self.Status.CHECKED_IN, self.Status.IN_PROGRESS]
-        ).exclude(pk=self.pk)
-
-        # Check if any existing appointment overlaps with this one
-        for appt in overlapping
+    def by_doctor(self, doctor_id: uuid.UUID):
+        return self.filter(doctor_id=doctor_id).select_related('
