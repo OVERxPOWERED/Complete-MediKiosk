@@ -2,9 +2,11 @@
 import json
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -63,8 +65,6 @@ class DoctorFactory(UserFactory):
     def groups(self, create, extracted, **kwargs):
         if not create:
             return
-        from django.contrib.auth.models import Group
-
         doctor_group, _ = Group.objects.get_or_create(name="Doctors")
         self.groups.add(doctor_group)
 
@@ -76,8 +76,6 @@ class NurseFactory(UserFactory):
     def groups(self, create, extracted, **kwargs):
         if not create:
             return
-        from django.contrib.auth.models import Group
-
         nurse_group, _ = Group.objects.get_or_create(name="Nurses")
         self.groups.add(nurse_group)
 
@@ -126,16 +124,6 @@ class AppointmentFactory(DjangoModelFactory):
     notes = factory.Faker("paragraph", nb_sentences=2)
     created_by = factory.SubFactory(NurseFactory)
 
-    @factory.post_generation
-    def set_scheduled_at(self, create, extracted, **kwargs):
-        if not create:
-            return
-        if extracted:
-            self.scheduled_at = extracted
-        else:
-            self.scheduled_at = timezone.now() + timedelta(days=7)
-        self.save()
-
 
 class MedicalRecordFactory(DjangoModelFactory):
     class Meta:
@@ -144,43 +132,10 @@ class MedicalRecordFactory(DjangoModelFactory):
     patient = factory.SubFactory(PatientFactory)
     doctor = factory.SubFactory(DoctorFactory)
     appointment = factory.SubFactory(AppointmentFactory)
-    visit_type = FuzzyChoice(["initial", "follow_up", "emergency", "routine"])
-    chief_complaint = factory.Faker("sentence", nb_words=8)
-    history_of_present_illness = factory.Faker("paragraph", nb_sentences=3)
-    physical_examination = factory.Faker("paragraph", nb_sentences=3)
-    assessment = factory.Faker("paragraph", nb_sentences=2)
-    plan = factory.Faker("paragraph", nb_sentences=2)
-    vital_signs = factory.LazyFunction(
-        lambda: {
-            "blood_pressure": "120/80",
-            "heart_rate": 72,
-            "temperature": 98.6,
-            "respiratory_rate": 16,
-            "oxygen_saturation": 98,
-            "weight": 170,
-            "height": 70,
-        }
-    )
-    is_confidential = False
-
-
-class PrescriptionFactory(DjangoModelFactory):
-    class Meta:
-        model = Prescription
-
-    patient = factory.SubFactory(PatientFactory)
-    doctor = factory.SubFactory(DoctorFactory)
-    medical_record = factory.SubFactory(MedicalRecordFactory)
-    medication_name = factory.Faker("word")
-    dosage = factory.Faker("bothify", text="??mg")
-    frequency = FuzzyChoice(["once_daily", "twice_daily", "three_times_daily", "four_times_daily", "as_needed"])
-    route = FuzzyChoice(["oral", "topical", "injection", "inhalation", "sublingual"])
-    quantity = factory.Faker("random_int", min=7, max=90)
-    refills = factory.Faker("random_int", min=0, max=5)
-    status = FuzzyChoice([choice[0] for choice in PrescriptionStatus.choices])
-    instructions = factory.Faker("sentence", nb_words=10)
-    start_date = factory.LazyFunction(date.today)
-    end_date = factory.LazyAttribute(lambda o: o.start_date + timedelta(days=30))
+    diagnosis = factory.Faker("sentence", nb_words=4)
+    treatment_plan = factory.Faker("paragraph", nb_sentences=3)
+    notes = factory.Faker("paragraph", nb_sentences=2)
+    created_by = factory.SubFactory(NurseFactory)
 
 
 class LabResultFactory(DjangoModelFactory):
@@ -191,6 +146,21 @@ class LabResultFactory(DjangoModelFactory):
     doctor = factory.SubFactory(DoctorFactory)
     medical_record = factory.SubFactory(MedicalRecordFactory)
     test_name = factory.Faker("word")
-    test_code = factory.Faker("bothify", text="LAB-####")
-    result_value = factory.Faker("pyfloat", left_digits=3, right_digits=2, positive=True)
-    unit = FuzzyChoice(["mg/dL", "mmol/L", "g/dL", "U/L", "ng/mL", "pg/m
+    test_value = factory.Faker("pyfloat", left_digits=3, right_digits=2, positive=True)
+    reference_range = factory.Faker("pystr_format", string_format="??-??")
+    unit = FuzzyChoice(["mg/dL", "mmol/L", "g/dL", "U/L", "ng/mL"])
+    status = FuzzyChoice(["normal", "abnormal", "critical"])
+    notes = factory.Faker("sentence", nb_words=8)
+    performed_at = factory.LazyAttribute(lambda _: timezone.now() - timedelta(days=factory.Faker("random_int", min=0, max=7).evaluate(None, None, {})))
+
+
+class PrescriptionFactory(DjangoModelFactory):
+    class Meta:
+        model = Prescription
+
+    patient = factory.SubFactory(PatientFactory)
+    doctor = factory.SubFactory(DoctorFactory)
+    medical_record = factory.SubFactory(MedicalRecordFactory)
+    medication_name = factory.Faker("word")
+    dosage = factory.Faker("pystr_format", string_format="??mg")
+    frequency =
