@@ -6,6 +6,9 @@ Provides RESTful endpoints for Patient, Doctor, Appointment, and MedicalRecord e
 with comprehensive OpenAPI 3 schema documentation via drf-spectacular.
 """
 
+import logging
+import uuid
+from functools import wraps
 from django.db.models import Q, Count, Prefetch
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -53,6 +56,50 @@ from apps.core.permissions import (
     IsAppointmentParticipant,
     IsMedicalRecordAuthorized,
 )
+from apps.cache.utils import cache_response, invalidate_cache_pattern
+
+logger = logging.getLogger(__name__)
+
+
+def log_request(view_func):
+    """Decorator to log requests with correlation IDs for tracing."""
+    @wraps(view_func)
+    def wrapper(self, request, *args, **kwargs):
+        correlation_id = request.headers.get('X-Correlation-ID', str(uuid.uuid4()))
+        request.correlation_id = correlation_id
+        
+        logger.info(
+            "API request started",
+            extra={
+                'correlation_id': correlation_id,
+                'method': request.method,
+                'path': request.path,
+                'user_id': getattr(request.user, 'id', None) if request.user.is_authenticated else None,
+            }
+        )
+        
+        try:
+            response = view_func(self, request, *args, **kwargs)
+            logger.info(
+                "API request completed",
+                extra={
+                    'correlation_id': correlation_id,
+                    'status_code': response.status_code,
+                }
+            )
+            response['X-Correlation-ID'] = correlation_id
+            return response
+        except Exception as e:
+            logger.error(
+                "API request failed",
+                extra={
+                    'correlation_id': correlation_id,
+                    'error': str(e),
+                },
+                exc_info=True
+            )
+            raise
+    return wrapper
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -113,10 +160,7 @@ class LargeResultsSetPagination(PageNumberPagination):
                 enum=["created_at", "-created_at", "updated_at", "-updated_at", "last_name", "-last_name", "first_name", "-first_name", "date_of_birth", "-date_of_birth"],
             ),
         ],
-        responses={
-            200: PatientListSerializer(many=True),
-            401: OpenApiResponse(description="Authentication required"),
-        },
+        responses={200: PatientListSerializer(many=True)},
         examples=[
             OpenApiExample(
                 "Patient List Response",
@@ -137,62 +181,13 @@ class LargeResultsSetPagination(PageNumberPagination):
                             "is_active": True,
                             "created_at": "2024-01-15T10:30:00Z",
                         }
-                    ],
+                    ]
                 },
                 response_only=True,
-            ),
+            )
         ],
-        tags=["Patients"],
     ),
     create=extend_schema(
         summary="Create a new patient",
-        description="Register a new patient in the system. Requires appropriate permissions.",
+        description="Register a new patient in the system. Requires authentication.",
         request=PatientSerializer,
-        responses={
-            201: PatientDetailSerializer,
-            400: OpenApiResponse(description="Validation error"),
-            401: OpenApiResponse(description="Authentication required"),
-            403: OpenApiResponse(description="Permission denied"),
-        },
-        examples=[
-            OpenApiExample(
-                "Create Patient Request",
-                value={
-                    "first_name": "Jane",
-                    "last_name": "Smith",
-                    "date_of_birth": "1990-03-22",
-                    "gender": "F",
-                    "email": "jane.smith@example.com",
-                    "phone": "+1-555-0456",
-                    "address": "123 Main St, Anytown, ST 12345",
-                    "emergency_contact_name": "John Smith",
-                    "emergency_contact_phone": "+1-555-0789",
-                    "insurance_provider": "HealthCare Plus",
-                    "insurance_policy_number": "HCP-789456",
-                    "allergies": "Penicillin, Latex",
-                    "medical_conditions": "Asthma",
-                },
-                request_only=True,
-            ),
-        ],
-        tags=["Patients"],
-    ),
-    retrieve=extend_schema(
-        summary="Retrieve a patient by ID",
-        description="Get detailed information for a specific patient including related appointments and medical records summary.",
-        responses={
-            200: PatientDetailSerializer,
-            401: OpenApiResponse(description="Authentication required"),
-            404: OpenApiResponse(description="Patient not found"),
-        },
-        tags=["Patients"],
-    ),
-    update=extend_schema(
-        summary="Update a patient (full update)",
-        description="Replace all fields of a patient record. Requires ownership or admin permissions.",
-        request=PatientSerializer,
-        responses={
-            200: PatientDetailSerializer,
-            400: OpenApiResponse(description="Validation error"),
-            401: OpenApiResponse(description="Authentication required"),
-            403: OpenApiResponse(description="Permission denied"),
