@@ -29,11 +29,12 @@
 - [ ] Finalize production deployment verification checklist
 
 ## API Documentation Scaffold
-- [ ] Set up drf-spectacular for OpenAPI 3 schema generation
-- [ ] Configure schema endpoints (/api/schema/, /api/docs/, /api/redoc/)
-- [ ] Add schema annotations to all ViewSets (extend_schema, OpenApiParameter)
-- [ ] Generate and commit API reference markdown
+- [x] Set up drf-spectacular for OpenAPI 3 schema generation
+- [x] Configure schema endpoints (/api/schema/, /api/docs/, /api/redoc/)
+- [x] Add schema annotations to all ViewSets (extend_schema, OpenApiParameter)
+- [x] Generate and commit API reference markdown
 
 ## Checkpoint History
 - **2026-10-05**: Initialized roadmap progress tracker with active project milestones.
 - **2026-10-05**: Completed environment guardrails and validation utilities (Milestone 1), implemented automated unit test suites for core logic (Milestone 4), configured system health checks and status diagnostics (Milestone 3). Added API Documentation Scaffold section for Milestone 5 deliverables.
+- **2026-10-05**: Completed API documentation scaffold with drf-spectacular - OpenAPI 3 schema, Swagger UI at /api/docs/, ReDoc at /api/redoc/
